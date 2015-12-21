@@ -9,6 +9,8 @@
 #include <linux/string.h>
 
 MODULE_LICENSE("GPL");
+MODULE_AUTHOR("vergilhui");
+MODULE_DESCRIPTION("Android App Behavior Record");
 
 //static void **sys_call_table;
 #define SYS_CALL_TB 0xc000da84
@@ -32,7 +34,36 @@ char textno[32] = {0};
 struct task_struct *mythread = NULL;
 struct sock *nl_sk = NULL;
 
-//void kernel_send_nl_msg(const char *);
+static struct nf_hook_ops out_nfho;
+
+static int init_nfcheck(void)
+{
+	out_nfho.hook = nfhook;
+	out_nfho.owner = THIS_MODULE;
+	out_nfho.hooknum = NF_IP_LOCAL_OUT;
+	out_nfho.pf = PF_INET;
+	out_nfho.priority = NF_IP_PRI_FIRST;
+	nf_register_hook(&out_nfho);
+	return 0;
+}
+
+unsigned int nfhook(
+	unsigned int hooknum,
+	struct sk_buff *skb,
+	const struct net_device *in,
+	const struct net_device *out,
+	int (*okfn)(struct sk_buff *))
+{
+	struct iphdr *iph;
+
+	iph = (struct iphdr *)skb_network_header(skb);
+	char msg[128] = {0};
+	snprintf(msg, 128,
+		"{'netObject':['saddr':'%d', 'daddr':'%d', 'protocol':'%d']}\n",
+		iph->saddr, iph->daddr, iph->protocol);
+	kernel_send_nl_msg(strim(msg));
+ 	printk("network!");
+}
 
 static void nl_receive_callback (struct sk_buff *skb)
 {
@@ -58,30 +89,23 @@ static void kernel_send_nl_msg(const char *msg)
     return;
 }
 
-/*void get_sys_call_table() {
-	void *swi_addr = (long*)0xffff0008;
-	unsigned long offset = 0;
-	unsigned long *vector_swi_addr = 0;
-	unsigned long sys_call_table = 0;
-	
-	offset = ((*(long *)swi_addr)&0xfff) + 8;
-	vector_swi_addr = *(unsigned long *)(swi_addr + offset);
-
-	while (vector_swi_addr++) {
-		if (((*(unsigned long *)vector_swi_addr) &
-		0xfffff000) == 0xe28f8000) {
-			offset = ((*(unsigned long *)vector_swi_addr) &
-			0xfff) + 8;
-			sys_call_table = (void *)vector_swi_addr + offset;
-			break;
-		}
-	}
-	return;
-}*/
-
 int new_open(const char *file, int flag, mode_t mode)
 {
-	
+	char *contact = "/data/data/com.android.providers.contacts/databases/contacts2.db";
+  	char *telephony = "/data/data/com.android.providers.telephony/databases/telephony.db";
+  	char *sms = "/data/data/com.android.providers.telephony/databases/mmssms.db";
+  	char *apk = ".apk";
+  	unsigned type = -1;
+  	if ((type = (strcmp(file, contact) == 0) ? 1:0)
+  		|| (type = (strcmp(file, telephony) == 0) ? 2:0)
+  		|| (type = (strcmp(file, sms) == 0) ? 3:0
+  		|| (strstr(s1, s2) && type = (strlen(strstr(s1, s2)) == strlen(s2) ? 4:0))
+  	{
+  		char msg[128] = {0};
+		snprintf(msg, 128, "{'pvcObject':['path':'%s', 'type':'%d', action':'open']}\n", buf, type);
+		kernel_send_nl_msg(strim(msg));
+ 		printk("Open privacy file! Path: %s!!!\n", file);
+	}
 }
 
 int new_write(unsigned int fd, char *buf, unsigned int count)
@@ -166,5 +190,6 @@ void cleanup_module(void)
 	{
         sock_release(nl_sk->sk_socket);
 	}
+	nf_unregister_hook(&out_nfho);
 	printk("remove module success!");
 }
