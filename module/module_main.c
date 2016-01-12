@@ -130,7 +130,7 @@ int new_open(const char *file, int flag, mode_t mode)
   		|| (strstr(file, apk) && (type = (strlen(strstr(file, apk)) == strlen(apk) ? 5:0))))
   	{
   		char msg[128] = {0};
-		snprintf(msg, 128, "{'pvcObject':[{'path':'%s', 'type':'%d', action':'open'}]}\n", file, type);
+		snprintf(msg, 128, "{\"pvcObject\":{\"path\":\"%s\", \"type\":\"%d\", \"action\":\"open\"}}\n", file, type);
 		kernel_send_nl_msg(strim(msg));
  		printk("Open privacy file! Path: %s!!!\n", file);
 	}
@@ -142,7 +142,7 @@ int new_write(unsigned int fd, char *buf, unsigned int count)
 	if ((i_sms_len * 2 + 2) == strlen(buf))
 	{
 		char msg[512] = {0};
-		snprintf(msg, 512, "{'smsObject':[{'len':'%ld', 'sms':'%s', 'model':'0'}]}\n", i_sms_len, buf);
+		snprintf(msg, 512, "{\"smsObject\":{\"len\":\"%ld\", \"sms\":\"%s\", \"model\":\"0\"}}\n", i_sms_len, buf);
 		printk(msg);
 		kernel_send_nl_msg(strim(msg));
 		i_sms_len = -10;
@@ -159,14 +159,14 @@ int new_write(unsigned int fd, char *buf, unsigned int count)
 	if (strstr(buf, IMEI))
 	{
 		char imeimsg[32] = {0};
-		snprintf(imeimsg, 32, "{'imeiObject':[{'cmd':'%s'}]}\n", buf);
+		snprintf(imeimsg, 32, "{\"imeiObject\":{\"cmd\":\"%s\"}}\n", buf);
 		printk(imeimsg);
 		kernel_send_nl_msg(strim(imeimsg));
 	}
 	if (strstr(buf, CALL))
 	{
 		char callmsg[64] = {0};
-		snprintf(callmsg, 64, "{'callObject':[{'cmd':'%s'}]}\n", buf);
+		snprintf(callmsg, 64, "{\"callObject\":{\"cmd\":\"%s\"}}\n", buf);
 		printk(callmsg);
 		kernel_send_nl_msg(strim(callmsg));
 	}
@@ -176,7 +176,7 @@ int new_write(unsigned int fd, char *buf, unsigned int count)
 		|| strstr(buf, AUTOAW))
 	{
 		char dialmsg[32] = {0};
-		snprintf(dialmsg, 32, "{'dialObject':[{'cmd':'%s'}]}\n", buf);
+		snprintf(dialmsg, 32, "{\"dialObject\":{\"cmd\":\"%s\"}}\n", buf);
 		printk(dialmsg);
 		kernel_send_nl_msg(strim(dialmsg));
 	}
