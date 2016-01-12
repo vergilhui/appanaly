@@ -1,0 +1,5 @@
+--------- beginning of system
+--------- beginning of main
+I/AppanalyTag( 1126): {"callObject":{"cmd":"ATD15549417535;"}}
+I/AppanalyTag( 1126): {"smsObject":{"len":"28", "sms":"0001000b815145497135f5000011413759fe4e934161381c147687d979", "model":"0"}}
+I/AppanalyTag( 1126): {"dialObject":{"cmd":"ATA"}}
