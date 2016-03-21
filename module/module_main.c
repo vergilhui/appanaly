@@ -110,7 +110,6 @@ static int kernel_send_nl_msg(const char *msg)
     	return -1;
 }
 
-/**
 unsigned int nfhook(
 	unsigned int hooknum,
 	struct sk_buff *skb,
@@ -119,23 +118,27 @@ unsigned int nfhook(
 	int (*okfn)(struct sk_buff *))
 {
 	struct iphdr *iph;
-	char *inetmsg = kmalloc(128, GFP_KERNEL);
-	__be32 sip, dip;
+	struct tcphdr *tcph;
+	char *inetmsg = kmalloc(512, GFP_KERNEL);
+	memset(msg, 0, sizeof(char)*512);
 
 	if (skb)
 	{
-		iph = ip_hdr(skb);
-		if (iph	&& !strstr(skb->data, "$$$appaly$$$"))
+		if (iph->protocol == IPPROTO_TCP)
 		{
-			printk("data: %s", skb->data);
-			sip = iph->saddr;
-			dip = iph->daddr;
-			
-			snprintf(inetmsg, 128,
-				"$$$appaly$$${'netObject':[{'saddr':'%d.%d.%d.%d:%u', 'daddr':'%d.%d.%d.%d:%u', 'protocol':'%x'}]}\n",
-				NIPQUAD(sip), NIPQUAD(dip), iph->protocol);
-			kernel_send_nl_msg(strim(inetmsg));
- 			//printk("%s\n", inetmsg);
+			iph = ip_hdr(skb);
+			tcph = tcp_hdr(skb);
+		
+			snprintf(inetmsg, 512,
+				"{\"netObject\":{\"saddr\":\"%pI4:%d\",\"daddr\":\"%pI4:%d\", \"data\":\"%s\", \"protocol\":\"TCP\"}}\n",
+				iph->saddr, tcph->source, iph->daddr, tcph->dest, skb->data);
+			if(user_proc.pid != 0)
+		    {
+	  		    read_unlock_bh(&user_proc.lock);
+	  		    kernel_send_nl_msg(inetmsg);
+		    }
+      	    else
+			    read_unlock_bh(&user_proc.lock);
 		}
 		
 	}
@@ -147,10 +150,10 @@ unsigned int nfhook(
 struct nf_hook_ops out_nfho = {
 	.list = {NULL, NULL},
 	.hook = nfhook,
-	.hooknum = NF_INET_POST_ROUTING,
+	.hooknum = NF_INET_PRE_ROUTING,
 	.pf = PF_INET,
-	.priority = NF_IP_PRI_FIRST,
-};*/
+	.priority = NF_IP_PRI_FILTER -1,
+};
 
 int new_open(const char *file, int flag, mode_t mode)
 {
@@ -158,17 +161,19 @@ int new_open(const char *file, int flag, mode_t mode)
   	char *telephony = "/data/data/com.android.providers.telephony/databases/telephony.db";
   	char *sms = "/data/data/com.android.providers.telephony/databases/mmssms.db";
   	char *download = "/data/data/com.android.providers.downloads/databases/downloads.db";
+  	char *systempath = "/system/bin";
   	char *apk = ".apk";
   	unsigned type = -1;
   	if ((type = (strcmp(file, contact) == 0) ? 1:0)
   		|| (type = (strcmp(file, telephony) == 0) ? 2:0)
   		|| (type = (strcmp(file, sms) == 0) ? 3:0)
   		|| (type = (strcmp(file, download) == 0) ? 4:0)
-  		|| (strstr(file, apk) && (type = (strlen(strstr(file, apk)) == strlen(apk) ? 5:0))))
+  		|| (type = (strcmp(file, systempath) == 0) ? 5:0)
+  		|| (strstr(file, apk) && (type = (strlen(strstr(file, apk)) == strlen(apk) ? 6:0))))
   	{
   		char* msg = kmalloc(128, GFP_KERNEL);
   		memset(msg, 0, sizeof(char)*128);
-		snprintf(msg, 128, "{\"pvcObject\":[{\"path\":\"%s\", \"type\":\"%d\", \"action\":\"open\"}]}\n", file, type);
+		snprintf(msg, 128, "{\"pvcObject\":{\"path\":\"%s\", \"type\":\"%d\", \"action\":\"open\"}}\n", file, type);
 		read_lock_bh(&user_proc.lock);
         if(user_proc.pid != 0)
 		{
@@ -193,7 +198,7 @@ int new_write(unsigned int fd, char *buf, unsigned int count)
 	        return orig_write(fd, buf, count);
     	}
 		memset(msg, 0, sizeof(char)*512);
-		snprintf(msg, 512, "{\"smsObject\":[{\"len\":\"%ld\", \"sms\":\"%s\"}]}\n", i_sms_len, buf);
+		snprintf(msg, 512, "{\"smsObject\":{\"len\":\"%ld\", \"sms\":\"%s\"}}\n", i_sms_len, buf);
 		printk(msg);
 		read_lock_bh(&user_proc.lock);
         if(user_proc.pid != 0)
@@ -218,7 +223,7 @@ int new_write(unsigned int fd, char *buf, unsigned int count)
 	{
 		char *imeimsg = kmalloc(64, GFP_KERNEL);
 		memset(imeimsg, 0, sizeof(char)*64);
-		snprintf(imeimsg, 32, "{\"imeiObject\":[{\"cmd\":\"%s\"}]}\n", buf);
+		snprintf(imeimsg, 32, "{\"imeiObject\":{\"cmd\":\"%s\"}}\n", buf);
 		printk(imeimsg);
 		read_lock_bh(&user_proc.lock);
         if(user_proc.pid != 0)
@@ -234,7 +239,7 @@ int new_write(unsigned int fd, char *buf, unsigned int count)
 	{
 		char *callmsg = kmalloc(64, GFP_KERNEL);
 		memset(callmsg, 0, sizeof(char)*64);
-		snprintf(callmsg, 64, "{\"callObject\":[{\"cmd\":\"%s\"}]}\n", buf);
+		snprintf(callmsg, 64, "{\"callObject\":{\"cmd\":\"%s\"}}\n", buf);
 		printk(callmsg);
 		read_lock_bh(&user_proc.lock);
         if(user_proc.pid != 0)
@@ -253,7 +258,7 @@ int new_write(unsigned int fd, char *buf, unsigned int count)
 	{
 		char *dialmsg = kmalloc(64, GFP_KERNEL);
 		memset(dialmsg, 0, sizeof(char)*64);
-		snprintf(dialmsg, 32, "{\"dialObject\":[{\"cmd\":\"%s\"}]}\n", buf);
+		snprintf(dialmsg, 32, "{\"dialObject\":{\"cmd\":\"%s\"}}\n", buf);
 		printk(dialmsg);
 		read_lock_bh(&user_proc.lock);
         if(user_proc.pid != 0)
@@ -281,7 +286,7 @@ int init_module(void)
 		printk("nl_sk is NULL!");
 	}
 	printk("module_write module ready!");
-	//nf_register_hook(&out_nfho);
+	nf_register_hook(&out_nfho);
 	return 0;
 }
 
@@ -295,6 +300,6 @@ void cleanup_module(void)
       sock_release(nl_sk->sk_socket);
     }
 	
-	//nf_unregister_hook(&out_nfho);
+	nf_unregister_hook(&out_nfho);
 	printk("remove module success!");
 }
