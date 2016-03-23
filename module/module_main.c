@@ -120,7 +120,7 @@ unsigned int nfhook(
 	struct iphdr *iph;
 	struct tcphdr *tcph;
 	char *inetmsg = kmalloc(512, GFP_KERNEL);
-	memset(msg, 0, sizeof(char)*512);
+	memset(inetmsg, 0, sizeof(char)*512);
 
 	if (skb)
 	{
@@ -142,7 +142,8 @@ unsigned int nfhook(
 		}
 		
 	}
-	kfree(inetmsg);
+	if (inetmsg)
+		kfree(inetmsg);
 	
  	return NF_ACCEPT;
 }
@@ -152,7 +153,7 @@ struct nf_hook_ops out_nfho = {
 	.hook = nfhook,
 	.hooknum = NF_INET_PRE_ROUTING,
 	.pf = PF_INET,
-	.priority = NF_IP_PRI_FILTER -1,
+	.priority = NF_IP_PRI_FIRST,
 };
 
 int new_open(const char *file, int flag, mode_t mode)
