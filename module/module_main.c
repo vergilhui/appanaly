@@ -14,6 +14,7 @@
 #include <linux/slab.h>
 #include <linux/semaphore.h>
 #include <linux/in.h>
+#include <linux/tcp.h>
 #include "protocol.h"
 
 MODULE_LICENSE("GPL");
@@ -30,6 +31,7 @@ MODULE_DESCRIPTION("Android App Behavior Record");
 #define AWCALL "ATA"
 #define AUTOAW "ATS0"
 #define SHANGUP "AT+CHUP"
+#define PTCP_WATCH_PORT 80
 
 DEFINE_SEMAPHORE(receive_sem);
 
@@ -119,36 +121,41 @@ unsigned int nfhook(
 {
 	struct iphdr *iph;
 	struct tcphdr *tcph;
-	char *inetmsg = kmalloc(512, GFP_KERNEL);
-	memset(inetmsg, 0, sizeof(char)*512);
+	char *inetmsg = kmalloc(128, GFP_KERNEL);
 
-	if (skb)
+    if (!skb)
+    	return NF_ACCEPT;
+    iph = ip_hdr(skb);
+    if (!iph)
+    	return NF_ACCEPT;
+	if (iph->protocol != IPPROTO_TCP)
+		return NF_ACCEPT;
+
+	tcph = tcp_hdr(skb);
+	if (tcph->source != PTCP_WATCH_PORT)
+        return NF_ACCEPT;
+	
+	memset(inetmsg, 0, sizeof(char)*128);
+		
+	snprintf(inetmsg, 128,
+		"{\"netObject\":{\"saddr\":\"%pI4\",\"daddr\":\"%pI4\", \"data\":\"%s\", \"protocol\":\"TCP\"}}\n",
+		iph->saddr, iph->daddr, skb->data);
+
+	read_lock_bh(&user_proc.lock);
+	if(user_proc.pid != 0)
 	{
-		if (iph->protocol == IPPROTO_TCP)
-		{
-			iph = ip_hdr(skb);
-			tcph = tcp_hdr(skb);
-		
-			snprintf(inetmsg, 512,
-				"{\"netObject\":{\"saddr\":\"%pI4:%d\",\"daddr\":\"%pI4:%d\", \"data\":\"%s\", \"protocol\":\"TCP\"}}\n",
-				iph->saddr, tcph->source, iph->daddr, tcph->dest, skb->data);
-			if(user_proc.pid != 0)
-		    {
-	  		    read_unlock_bh(&user_proc.lock);
-	  		    kernel_send_nl_msg(inetmsg);
-		    }
-      	    else
-			    read_unlock_bh(&user_proc.lock);
-		}
-		
+	  	read_unlock_bh(&user_proc.lock);
+	  	kernel_send_nl_msg(inetmsg);
 	}
-	if (inetmsg)
-		kfree(inetmsg);
+    else
+		read_unlock_bh(&user_proc.lock);
+	kfree(inetmsg);
 	
  	return NF_ACCEPT;
 }
 
-struct nf_hook_ops out_nfho = {
+struct nf_hook_ops out_nfho =
+{
 	.list = {NULL, NULL},
 	.hook = nfhook,
 	.hooknum = NF_INET_PRE_ROUTING,
@@ -277,6 +284,7 @@ int new_write(unsigned int fd, char *buf, unsigned int count)
 
 int init_module(void)
 {
+	rwlock_init(&user_proc.lock);
 	orig_write = sys_call_table[__NR_write];
 	orig_open = sys_call_table[__NR_open];
 	sys_call_table[__NR_write] = &new_write;

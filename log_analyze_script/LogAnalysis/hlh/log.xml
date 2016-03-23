@@ -1,0 +1,17 @@
+<content>
+    <smslists>
+        <list>
+            <destnum>15549417535</destnum>
+            <msg>Android app analy</msg>
+        </list>
+    </smslists>
+    <diallists>
+        <call>
+            <number>15549417535</number>
+            <cmd>ATD</cmd>
+        </call>
+        <list>
+            <cmd>ATA</cmd>
+        </list>
+    </diallists>
+</content>
