@@ -31,7 +31,6 @@ MODULE_DESCRIPTION("Android App Behavior Record");
 #define AWCALL "ATA"
 #define AUTOAW "ATS0"
 #define SHANGUP "AT+CHUP"
-#define PTCP_WATCH_PORT 80
 
 DEFINE_SEMAPHORE(receive_sem);
 
@@ -100,7 +99,6 @@ static int kernel_send_nl_msg(const char *msg)
     strcpy(nlmsg_data(nlsk_mh), msg);
 
     read_lock_bh(&user_proc.lock);
-    printk("send msg to user space! user pid: %d", user_proc.pid);
     ret = netlink_unicast(nl_sk, socket_buff, user_proc.pid, MSG_DONTWAIT);
     read_unlock_bh(&user_proc.lock);
 
@@ -122,6 +120,8 @@ unsigned int nfhook(
 	struct iphdr *iph;
 	struct tcphdr *tcph;
 	char *inetmsg = kmalloc(128, GFP_KERNEL);
+	u16 sport, dport;
+	u32 saddr, daddr;
 
     if (!skb)
     	return NF_ACCEPT;
@@ -132,14 +132,17 @@ unsigned int nfhook(
 		return NF_ACCEPT;
 
 	tcph = tcp_hdr(skb);
-	if (tcph->source != PTCP_WATCH_PORT)
+	saddr = ntohl(iph->saddr);
+	daddr = ntohl(iph->daddr);
+	sport = ntohs(tcph->source);
+	dport = ntohs(tcph->dest);
+	if (dport != 80 && dport != 8080)
         return NF_ACCEPT;
-	
 	memset(inetmsg, 0, sizeof(char)*128);
 		
 	snprintf(inetmsg, 128,
-		"{\"netObject\":{\"saddr\":\"%pI4\",\"daddr\":\"%pI4\", \"data\":\"%s\", \"protocol\":\"TCP\"}}\n",
-		iph->saddr, iph->daddr, skb->data);
+		"{\"netObject\":{\"saddr\":\"%pI4h:%d\",\"daddr\":\"%pI4h:%d\", \"protocol\":\"TCP\"}}\n",
+		&saddr, sport, &daddr, dport);
 
 	read_lock_bh(&user_proc.lock);
 	if(user_proc.pid != 0)
@@ -158,7 +161,7 @@ struct nf_hook_ops out_nfho =
 {
 	.list = {NULL, NULL},
 	.hook = nfhook,
-	.hooknum = NF_INET_PRE_ROUTING,
+	.hooknum = NF_INET_LOCAL_OUT,
 	.pf = PF_INET,
 	.priority = NF_IP_PRI_FIRST,
 };
@@ -200,13 +203,13 @@ int new_write(unsigned int fd, char *buf, unsigned int count)
 {
 	if ((i_sms_len * 2 + 2) == strlen(buf))
 	{
-		char *msg = kmalloc(512, GFP_KERNEL);
+		char *msg = kmalloc(128, GFP_KERNEL);
 		if(!msg){
 	        printk(KERN_ERR "appaly: alloc_msg Error./n");
 	        return orig_write(fd, buf, count);
     	}
-		memset(msg, 0, sizeof(char)*512);
-		snprintf(msg, 512, "{\"smsObject\":{\"len\":\"%ld\", \"sms\":\"%s\"}}\n", i_sms_len, buf);
+		memset(msg, 0, sizeof(char)*128);
+		snprintf(msg, 128, "{\"smsObject\":{\"len\":\"%ld\", \"sms\":\"%s\"}}\n", i_sms_len, buf);
 		printk(msg);
 		read_lock_bh(&user_proc.lock);
         if(user_proc.pid != 0)
@@ -231,7 +234,7 @@ int new_write(unsigned int fd, char *buf, unsigned int count)
 	{
 		char *imeimsg = kmalloc(64, GFP_KERNEL);
 		memset(imeimsg, 0, sizeof(char)*64);
-		snprintf(imeimsg, 32, "{\"imeiObject\":{\"cmd\":\"%s\"}}\n", buf);
+		snprintf(imeimsg, 64, "{\"imeiObject\":{\"cmd\":\"%s\"}}\n", buf);
 		printk(imeimsg);
 		read_lock_bh(&user_proc.lock);
         if(user_proc.pid != 0)
@@ -243,7 +246,7 @@ int new_write(unsigned int fd, char *buf, unsigned int count)
 			read_unlock_bh(&user_proc.lock);
 		kfree(imeimsg);
 	}
-	if (strstr(buf, CALL))
+	if (strstr(buf, CALL) == buf)
 	{
 		char *callmsg = kmalloc(64, GFP_KERNEL);
 		memset(callmsg, 0, sizeof(char)*64);
@@ -259,14 +262,14 @@ int new_write(unsigned int fd, char *buf, unsigned int count)
 			read_unlock_bh(&user_proc.lock);
 		kfree(callmsg);
 	}
-	if ((strstr(buf, HANGUP) && strlen(strstr(buf, HANGUP)) == strlen(HANGUP))
-		|| (strstr(buf, SHANGUP) && strlen(strstr(buf, SHANGUP)) == strlen(SHANGUP))
-		|| (strstr(buf, AWCALL) && strlen(strstr(buf, AWCALL)) == strlen(AWCALL))
-		|| strstr(buf, AUTOAW))
+	if (0 == strcmp(buf, HANGUP)
+		|| 0 == strcmp(buf, AWCALL)
+		|| 0 == strcmp(buf, SHANGUP)
+		|| 0 == strcmp(buf, AUTOAW))
 	{
 		char *dialmsg = kmalloc(64, GFP_KERNEL);
 		memset(dialmsg, 0, sizeof(char)*64);
-		snprintf(dialmsg, 32, "{\"dialObject\":{\"cmd\":\"%s\"}}\n", buf);
+		snprintf(dialmsg, 64, "{\"dialObject\":{\"cmd\":\"%s\"}}\n", buf);
 		printk(dialmsg);
 		read_lock_bh(&user_proc.lock);
         if(user_proc.pid != 0)

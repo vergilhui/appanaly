@@ -18,15 +18,7 @@ if __name__ == '__main__':
     logfile = open('log.txt', 'w')
     logfile.close()
     call(['adb', 'logcat', '-c'])
-    adb = Popen(['adb', 'logcat', '-s', 'AppanalyTag', 'log.txt'], stdin=PIPE, stdout=PIPE)
-    print(os.path.abspath(__file__))
-    print(os.path.dirname(os.path.abspath(__file__)))
-    workplace = os.path.dirname(os.path.abspath(__file__)) + '\MonkeyRunner.py'
-    print(workplace)
-    print(os.path.isfile(workplace))
-    print(os.path.isfile('MonkeyRunner.py'))
-    print(os.path.isfile(apkName))
-    print(os.getcwd())
+    adb = Popen(['adb', 'logcat', '-s', 'AppanalyTag', os.path.dirname(os.path.realpath(__file__)) + '\log.txt'], stdin=PIPE, stdout=PIPE)
     ret = call(['monkeyrunner', 'MonkeyRunner.py', apkName], stderr=PIPE, cwd=os.path.dirname(os.path.realpath(__file__)))
     print("Now please start running the app and input \"exit\" exit!")
     while 1:

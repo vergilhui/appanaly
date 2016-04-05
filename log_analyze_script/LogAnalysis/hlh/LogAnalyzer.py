@@ -78,7 +78,6 @@ class Analyzer:
         """
         net = {'saddr': netObj['netObject']['saddr'],
                'daddr': netObj['netObject']['daddr'],
-               'data': netObj['netObject']['data'],
                'protocol': netObj['netObject']['protocol']}
         self.netlist.append(net)
         
@@ -156,19 +155,28 @@ class Analyzer:
                 ET.SubElement(lists, 'msg').text = e['msg']
                 smslists.append(lists)
         
-        if len(self.diallist) > 0:
+        if len(self.diallist) > 0 or len(self.calllist) > 0:
             diallists = ET.Element('diallists')
             root.append(diallists)
-            if len(self.calllist) > 0:
-                for e in self.calllist:
-                    call = ET.Element('call')
-                    ET.SubElement(call, 'number').text = e['number']
-                    ET.SubElement(call, 'cmd').text = e['cmd']
-                    diallists.append(call)
+            for e in self.calllist:
+                call = ET.Element('call')
+                ET.SubElement(call, 'number').text = e['number']
+                ET.SubElement(call, 'cmd').text = e['cmd']
+                diallists.append(call)
             for e in self.diallist:
                 lists = ET.Element('list')
                 ET.SubElement(lists, 'cmd').text = e['cmd']
                 diallists.append(lists)
+
+        if len(self.netlist) > 0:
+            netlists = ET.Element('netlists')
+            root.append(netlists)
+            for e in self.netlist:
+                lists = ET.Element('list')
+                ET.SubElement(lists, 'saddr').text = e['saddr']
+                ET.SubElement(lists, 'daddr').text = e['daddr']
+                ET.SubElement(lists, 'protocol').text = e['protocol']
+                netlists.append(lists)
         
         if len(self.filelist) > 0:
             filelists = ET.Element('filelists')
@@ -179,6 +187,7 @@ class Analyzer:
                 ET.SubElement(lists, 'path').text = e['path']
                 ET.SubElement(lists, 'action').text = e['action']
                 filelists.append(lists)
+                
         self.__indent(root)
         return ET.ElementTree(root)
     
@@ -213,12 +222,18 @@ class Analyzer:
         for line in logf:
             npos = line.find('{')
             if npos >= 0:
-                logObj = json.loads(line[npos:])
-                if 'callObject' in logObj:
-                    self.__parseCall(logObj)
-                if 'smsObject' in logObj:
-                    self.__parseSms(logObj)
-                if 'dialObject' in logObj:
-                    self.__parseDial(logObj)
-                if 'netObject' in logObj:
-                    self.__parseNet(logObj)
+                try:
+                    logObj = json.loads(line[npos:])
+                    if 'callObject' in logObj:
+                        self.__parseCall(logObj)
+                    if 'smsObject' in logObj:
+                        self.__parseSms(logObj)
+                    if 'dialObject' in logObj:
+                        self.__parseDial(logObj)
+                    if 'pvcObject' in logObj:
+                        self.__parseFile(logObj)
+                    if 'netObject' in logObj:
+                        self.__parseNet(logObj)
+                except:
+                    print('Exception!')
+                    continue
